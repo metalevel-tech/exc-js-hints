@@ -15,10 +15,10 @@
  *      Default is 1. When the second param is set to 'false' (default), the script will scan all <li>st items and count them as lessons.
  * + single: if true, the script will download only one lesson.
  *      Default is false. In this case you must specify the lesson number in the first param.
- * + download: if 'all', the script will download all the videos and quizzes.
+ * + downloadType: if 'all', the script will download all the videos and quizzes.
  *      Default is 'all'. When the second param is set to 'false' (default) you don't need to specify this value.
- *      If 'quizzes', the script will download only quizzes.
- *      If 'videos', the script will download only videos.
+ *      If 'quiz', the script will download only quizzes.
+ *      If 'video', the script will download only videos.
  * 
  * Examples of usage:
  *  download();                     // download all videos and quizzes from the beginning
@@ -33,8 +33,9 @@
  * and then download manually the quizzes (if you need them), one by one, after solving each one - 'download(42, false);' (where 42 is the lesson number).
  */
 
- class Lesson {
-    constructor(lessonItem, courseName, lessonIndex, download) {
+// The Lesson class whose instances does the job of downloading the videos and quizzes
+class Lesson {
+    constructor(lessonItem, courseName, lessonIndex, downloadType) {
         this.lessonItem = lessonItem;
         this.courseName = courseName;
         this.src = "";
@@ -44,10 +45,10 @@
         this.fileName = "";
         this.lessonType = "video";
         this.lessonIndex = lessonIndex;
-        this.setData(download);
+        this.setData(downloadType);
     }
 
-    async setData(download = 'all') {
+    async setData(downloadType = "all") {
         const currentLesson = document.querySelector(".classroom-toc-item--selected");
 
         this.lessonTitle = currentLesson
@@ -65,7 +66,7 @@
         this.fileName = `${this.courseName} [${this.lessonIndex}] ${this.chapterTitle} ${this.lessonNumber}. ${this.lessonTitle}`;
 
         if (this.lessonTitle === "Chapter Quiz") {
-            if (download === 'all' || download === 'quiz') {
+            if (downloadType === "all" || downloadType === "quiz") {
                 this.lessonType = "quiz";
                 this.src = document.querySelector(".classroom-quiz .chapter-quiz");
                 console.log(this.fileName);
@@ -74,7 +75,7 @@
                 console.log(`${this.fileName} :: is skipped.`);
             }
         } else {
-            if (download === 'all' || download === 'video') {
+            if (downloadType === "all" || downloadType === "video") {
                 this.lessonType = "video";
                 this.src = document.querySelector("video").src;
                 console.log(this.fileName);
@@ -92,17 +93,17 @@
             .then(response => response.blob())
             .then(blob => {
                 const blobURL = URL.createObjectURL(blob);
-                const videoDownloadLink = document.createElement("a");
-                videoDownloadLink.href = blobURL;
-                videoDownloadLink.style = "display: none";
+                const downloadLink = document.createElement("a");
+                downloadLink.href = blobURL;
+                downloadLink.style = "display: none";
 
-                videoDownloadLink.download = fileName;
-                document.body.appendChild(videoDownloadLink);
-                videoDownloadLink.click();
+                downloadLink.download = fileName;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
 
                 return new Promise(resolve => {
                     setTimeout(() => {
-                        document.body.removeChild(videoDownloadLink);
+                        document.body.removeChild(downloadLink);
                         resolve();
                     }, 1500);
                 });
@@ -115,22 +116,22 @@
 
         return domtoimage.toPng(this.src)
             .then(function (dataUrl) {
-                const imgDownloadLink = document.createElement("a");
-                imgDownloadLink.href = dataUrl;
-                document.body.appendChild(imgDownloadLink);
-                imgDownloadLink.download = fileName;
-                imgDownloadLink.click();
+                const downloadLink = document.createElement("a");
+                downloadLink.href = dataUrl;
+                document.body.appendChild(downloadLink);
+                downloadLink.download = fileName;
+                downloadLink.click();
 
                 return new Promise(resolve => {
                     setTimeout(() => {
-                        document.body.removeChild(imgDownloadLink);
+                        document.body.removeChild(downloadLink);
                         resolve();
                     }, 3500);
                 });
 
             })
             .catch(function (error) {
-                console.error('oops, something went wrong!', error);
+                console.error("Oops, something went wrong with DOM-to-image!", error);
             });
     }
 
@@ -138,20 +139,20 @@
 
 // Get common data from the page
 const courseName = document.querySelector(".classroom-nav__details h1").innerText.replace(/\n.*$/, "").trim();
-let chapters = document.querySelectorAll('ul.classroom-toc-section__items');
-let lessons = document.querySelectorAll('li.classroom-toc-item');
+let chapters = document.querySelectorAll("ul.classroom-toc-section__items");
+let lessons = document.querySelectorAll("li.classroom-toc-item");
 
-function download(startFromLesson = 1, single = false, download = 'all') {
+function download(startFromLesson = 1, single = false, downloadType = "all") {
     // Expand all sections
-    const buttons = document.querySelectorAll('section > h2 > button.classroom-toc-section__toggle');
+    const buttons = document.querySelectorAll("section > h2 > button.classroom-toc-section__toggle");
     buttons.forEach(button => {
-        if (button.ariaExpanded == 'false') button.click();
+        if (button.ariaExpanded == "false") button.click();
     });
 
-    // Collect the data of the videos
+    // Collect the data of the lessons
     setTimeout(() => {
-        chapters = document.querySelectorAll('ul.classroom-toc-section__items');
-        lessons = document.querySelectorAll('li.classroom-toc-item');
+        chapters = document.querySelectorAll("ul.classroom-toc-section__items");
+        lessons = document.querySelectorAll("li.classroom-toc-item");
         lessons = Array.from(lessons);
 
         const lessonsNumber = lessons.length;
@@ -168,10 +169,10 @@ function download(startFromLesson = 1, single = false, download = 'all') {
                     await new Promise(resolve => setTimeout(resolve, timeout));
             } else {
                 for (const lesson of lessons) {
-                    lesson.querySelector('a').click();
+                    lesson.querySelector("a").click();
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     const lessonIndex = `${lessons.indexOf(lesson) + startFromLesson} - ${lessonsNumber}`;
-                    const lessonItem = new Lesson(lesson, courseName, lessonIndex, download);
+                    const lessonItem = new Lesson(lesson, courseName, lessonIndex, downloadType);
                     let timeout = 2000;
                     if (lessonItem.lessonType === "quiz") timeout = 4000;
                     await new Promise(resolve => setTimeout(resolve, timeout));
@@ -183,4 +184,4 @@ function download(startFromLesson = 1, single = false, download = 'all') {
     }, 1000);
 }
 
-// download(1, false, 'all');
+// download(1, false, "all");
