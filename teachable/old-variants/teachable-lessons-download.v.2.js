@@ -1,25 +1,5 @@
 /**
  * Download Teachable Courses.
- * 
- * The script requires 'html2pdf.js'. It is loaded in the beginning of this script.
- * 
- * By default, the script will download all the videos and other downloadable resources.
- * If on there are not resources for download available the script will create a PDF by the help of html2pdf.js.
- * It takes about 15 seconds for each item to be processed, because I'v tried to handle relatively slow Internet connection wit long timeouts.
- * 
- * 
- * The function 'download()' takes 2 optional parameters:
- * - startFromLesson: the first lesson to be downloaded. Default is 1. 
- * - lessonsNumberToDownload: the number of the lessons to be downloaded. Default is null - which means no limit, or all.
- * 
- * Examples of usage:
- *  download();                     // download all videos and/or other resources from the beginning
- *  download(5);                    // download all videos and/or other resources from the 5th lesson to the end
- *  download(5, 3);                 // start from the 5th lesson and download 3 videos and/pr other resources
- *  download(5, 1);                 // download the resources for the the 5th lesson only
- * 
- * Because the response of teachable's server sometime takes long time it is possible to have duplicated or/and missing lessons.
- * So you need to inspect the list of the downloaded resources, remove the duplicates and refetch the missing.
  */
 
 // Load the html2pdf library, https://github.com/eKoopmans/html2pdf.js
@@ -40,21 +20,19 @@ class Lesson {
         this.lessonNumber = null;
         this.lessonTitle = "";
         this.fileName = "";
-        this.fileExt = "mp4";
+        this.fileExt = ".mp4";
         this.lessonType = "video-or-pdf-or-zip";
         this.lessonIndex = "";
         this.setDataAndProcess(courseName, chapters, lessons);
     }
 
     async setDataAndProcess(courseName, chapters, lessons) {
-        // Get the current lesson, it is 'this.lesson' but I prefer to parse it from the DOM
+        // this.lesson - but I prefer to parse it from the DOM
         const currentLesson = document.querySelector(".section-item.next-lecture");
         
         // Get the title of the lesson
         this.lessonTitle = currentLesson
-            .querySelector(".lecture-name").innerText
-            .replace(/\n.*$/, "").replace(/\((\d+):(\d+)\)/, "($1m$2s)")
-            .replace(/:/g, "-").replace(/\s+_*\s*/, " ").replace(/^\d+\s*\-\s/, "").trim();
+            .querySelector(".lecture-name").innerText.replace(/\n.*$/, "").replace(/\((\d+):(\d+)\)/, "($1m$2s)").replace(/:/g, "-").replace(/\s+_*\s*/, " ").replace(/^\d+\s*\-\s/, "").trim();
 
         // Get the current chapter/section and its index/number within the list of chapters
         const currentChapter = currentLesson.parentElement.parentElement;
@@ -62,9 +40,7 @@ class Lesson {
         
         // Get the title of the chapter
         this.chapterTitle = currentChapter
-            .querySelector(".section-title").innerText
-            .replace(/\n.*$/, "").replace(/\((\d+):(\d+)\)/, "($1h$2m)")
-            .replace(/:/g, "-").replace(/\s+_*\s*/, " ").replace(/^\d+\s*\-\s/, "").trim();
+            .querySelector(".section-title").innerText.replace(/\n.*$/, "").replace(/\((\d+):(\d+)\)/, "($1h$2m)").replace(/:/g, "-").replace(/\s+_*\s*/, " ").replace(/^\d+\s*\-\s/, "").trim();
 
         // Get the current lesson's index/number within the chapter
         const lessonsInCurrentChapter = currentLesson.parentElement.querySelectorAll("li");
@@ -76,29 +52,32 @@ class Lesson {
         const lessonsCountLength = lessonsCount.toString().length;
 
         // Construct the lesson index that will be used for the file name, i.e. [017 - 342]
-        this.lessonIndex = `[${(lessons.indexOf(currentLesson) + 1).toString().padStart(lessonsCountLength, "0")} - ${lessonsCount}]`;
+        this.lessonIndex = `${(lessons.indexOf(currentLesson) + 1).toString().padStart(lessonsCountLength, "0")} - ${lessonsCount}`;
 
         // Construct the name of the file, the extension will be added later
-        this.fileName = `${courseName} ${this.lessonIndex} ${currentChapterIndex}. ${this.chapterTitle} ${this.lessonNumber}. ${this.lessonTitle}`;
+        this.fileName = `${courseName} [${this.lessonIndex}] ${currentChapterIndex}. ${this.chapterTitle} ${this.lessonNumber}. ${this.lessonTitle}`;
 
         // Find whether there are available resources for download
-        const thisLessonDownloadLinks = Array.from(document.querySelectorAll("a.download"));
+        const thisDownloadLinks = Array.from(document.querySelectorAll("a.download"));
 
         // If the list is not empty, download all - one by one, otherwise create screenshot
-        if (thisLessonDownloadLinks[0]) {
-            for (const link of thisLessonDownloadLinks) {
+        if (thisDownloadLinks[0]) {
+            for (const link of thisDownloadLinks) {
                 this.lessonType = "video-or-pdf-or-zip";
                 this.fileExt = link.dataset['xOriginDownloadName'].split(".").pop();
-                this.src = link.href;     
-                const fullFileName = `${this.fileName}.${this.fileExt}`; // console.log(fullFileName);
+                this.src = link.href;
+                
+                const fullFileName = `${this.fileName}.${this.fileExt}`;
+                // console.log(fullFileName);
     
                 await this.downloadResource(fullFileName);
             }
         } else {
             this.lessonType = "quiz";
-            this.fileExt = "pdf";
             this.src = document.querySelector('div[role=main].course-mainbar');
-            const fullFileName = `${this.fileName}.${this.fileExt}`; // console.log(fullFileName);
+            
+            const fullFileName = `${this.fileName}.pdf`;
+            // console.log(fullFileName);
 
             await this.downloadScreenShot(fullFileName);
         }
@@ -118,10 +97,19 @@ class Lesson {
                 downloadLink.click();
 
                 return new Promise(resolve => {
-                    document.body.removeChild(downloadLink);
                     console.log(fullFileName); // Log the file name
+                    document.body.removeChild(downloadLink);
                     setTimeout(resolve, 5500);
                 });
+                
+                // Tested version, but the above looks much clear
+                // return new Promise(resolve => {
+                //     setTimeout(() => {
+                //         console.log(fullFileName);
+                //         document.body.removeChild(downloadLink);
+                //         resolve();
+                //     }, 3500);
+                // });
             })
             .catch((error) => `Video fetch error: ${error}`);
     }
@@ -137,8 +125,7 @@ class Lesson {
 }
 
 // Get common data from the page
-const courseName = document.querySelector(".course-sidebar-head > h2").innerText
-    .replace(/\n.*$/, "").replace(/:/g, " -").trim();
+const courseName = document.querySelector(".course-sidebar-head > h2").innerText.replace(/\n.*$/, "").trim();
 let chapters = document.querySelectorAll('.course-section');
 let lessons = document.querySelectorAll('.course-section li.section-item');
 
@@ -146,7 +133,7 @@ let lessons = document.querySelectorAll('.course-section li.section-item');
 // Probably instead of loop it is better to use a recursive function,
 // which shifts the 'lessons' array at each iteration, process the shifted element,
 // and pass the rest array to itself as callback by promise.
-function download(startFromLesson = 1, lessonsNumberToDownload = null) {
+function download(offset = 1, articlesNumberToDownload = null) {
 
     setTimeout(() => {
         chapters = document.querySelectorAll('.course-section');
@@ -154,18 +141,20 @@ function download(startFromLesson = 1, lessonsNumberToDownload = null) {
 
         lessons = document.querySelectorAll('.course-section li.section-item');
         lessons = Array.from(lessons);
+
+        lessonsLoop = [...lessons];
+        lessonsLoop.splice(0, offset - 1);
+
+        console.log(chapters.length, lessons.length);
         
-        const lessonsLoop = [...lessons];
-        lessonsLoop.splice(0, startFromLesson - 1);
-        
-        console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Start from: ${startFromLesson}`);
-        
-        // Create an object for each lesson, the object will do everything, including the download
+        // Create an object for each lesson,
+        // the object will do everything, 
+        // including the download
         async function collectData() {
             let counter = 0;
 
             for (const lesson of lessonsLoop) {
-                if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload) return;
+                if (articlesNumberToDownload && counter++ >= articlesNumberToDownload) return;
 
                 lesson.querySelector('a').click();
                 await new Promise(resolve => setTimeout(resolve, 4000));
@@ -181,5 +170,5 @@ function download(startFromLesson = 1, lessonsNumberToDownload = null) {
     }, 1000);
 }
 
-download(3, 2);
-// download(1);
+// download(15, 1);
+download(1);

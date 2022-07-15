@@ -11,84 +11,97 @@
  * Once the script (and 'dom-to-image.js') are pasted in the console you can start the action by calling the function 'download()'.
  * 
  * The function 'download()' takes 3 optional parameters:
- * + startFromLesson: the first lesson to be downloaded.
- *      Default is 1. When the second param is set to 'false' (default), the script will scan all <li>st items and count them as lessons.
- * + single: if true, the script will download only one lesson.
- *      Default is false. In this case you must specify the lesson number in the first param.
- * + downloadType: if 'all', the script will download all the videos and quizzes.
- *      Default is 'all'. When the second param is set to 'false' (default) you don't need to specify this value.
- *      If 'quiz', the script will download only quizzes.
- *      If 'video', the script will download only videos.
+ * - startFromLesson: the first lesson to be downloaded. Default is 1. 
+ * - lessonsNumberToDownload: the number of the lessons to be downloaded. Default is null - which means no limit, or all.
+ * - downloadType: 'all', 'video' or 'quiz'. Default is 'all'.
  * 
  * Examples of usage:
  *  download();                     // download all videos and quizzes from the beginning
  *  download(5);                    // download all videos and quizzes from the 5th lesson to the end
- *  download(5, false);             // same as the above
- *  download(5, true);              // download only the 5th lesson (video or quiz)
- *  download(1, false, 'quiz');     // download only quizzes from the 1st lesson to the end
- *  download(1, false, 'video');    // download only videos from the 1st lesson to the end
+ *  download(5, 3);                 // start from the 5th lesson and download 3 videos and/pr quizzes
+ *  download(5, 1);                 // download only the 5th lesson
+ *  download(1, null, 'video');     // download only the videos from the beginning to the end
  * 
  * The videos are much easier to be handled, because quizzes have multiple pages and you must solve one question to view the next.
- * So probably you will want to: 1) download all videos by 'download(1, false, 'video');',
- * and then download manually the quizzes (if you need them), one by one, after solving each one - 'download(42, false);' (where 42 is the lesson number).
+ * So probably you will want to: 1st download all videos, and then download manually the quizzes (if you need them),
+ * one by one, after solving each of them - 'download(42, false);' (where 42 is the lesson number).
  */
 
 // The Lesson class whose instances does the job of downloading the videos and quizzes
 class Lesson {
-    constructor(lessonItem, courseName, lessonIndex, downloadType) {
-        this.lessonItem = lessonItem;
-        this.courseName = courseName;
+    constructor(lesson, courseName, downloadType, chapters, lessons) {
+        this.lesson = lesson;
         this.src = "";
         this.chapterTitle = "";
         this.lessonNumber = null;
         this.lessonTitle = "";
         this.fileName = "";
+        this.fileExt = "mp4";
         this.lessonType = "video";
-        this.lessonIndex = lessonIndex;
-        this.setData(downloadType);
+        this.lessonIndex = "";
+        this.setDataAndProcess(courseName, chapters, lessons, downloadType);
     }
 
-    async setData(downloadType = "all") {
+    async setDataAndProcess(courseName, chapters, lessons, downloadType = "all") {
+        // Get the current lesson, it is 'this.lesson' but I prefer to parse it from the DOM
         const currentLesson = document.querySelector(".classroom-toc-item--selected");
 
+        // Get the title of the lesson
         this.lessonTitle = currentLesson
-            .querySelector(".classroom-toc-item__title").innerText.replace(/\n.*$/, "").replace(/:/g, " -").trim();
+            .querySelector(".classroom-toc-item__title").innerText
+            .replace(/\n.*$/, "").replace(/:/g, " -").replace(/^\d+\s*[-.]\s/, "").trim();
 
-        this.chapterTitle = currentLesson.parentElement.parentElement
-            .querySelector("h2 span.classroom-toc-section__toggle-title").innerText.replace(/\n.*$/, "").replace(/:/g, " -").trim();
+        // Get the current chapter/section and its index/number within the list of chapters
+        const currentChapter = currentLesson.parentElement.parentElement;
+        const currentChapterIndex = chapters.indexOf(currentChapter);
 
-        if (this.chapterTitle === "Introduction") this.chapterTitle = `0. ${this.chapterTitle}`;
-        if (this.chapterTitle === "Conclusion") this.chapterTitle = `${chapters.length - 1}. ${this.chapterTitle}`;
+        // Get the title of the chapter
+        this.chapterTitle = currentChapter
+            .querySelector("h2 span.classroom-toc-section__toggle-title").innerText
+            .replace(/\n.*$/, "").replace(/:/g, " -").replace(/^\d+\s*[-.]\s/, "").trim();
 
+        // Get the current lesson's index/number within the chapter 
         const lessonsInCurrentChapter = currentLesson.parentElement.querySelectorAll("li");
         this.lessonNumber = Array.from(lessonsInCurrentChapter).indexOf(currentLesson) + 1;
 
-        this.fileName = `${this.courseName} [${this.lessonIndex}] ${this.chapterTitle} ${this.lessonNumber}. ${this.lessonTitle}`;
+        // Get the course count number length that will be used for a padding within the file name
+        // If the total count of the lesson is 342 (for example), the length of the number is 3
+        const lessonsCount = lessons.length;
+        const lessonsCountLength = lessonsCount.toString().length;
 
+        // Construct the lesson index that will be used for the file name, i.e. [017 - 342]
+        this.lessonIndex = `[${(lessons.indexOf(currentLesson) + 1).toString().padStart(lessonsCountLength, "0")} - ${lessonsCount}]`;
+
+        // Construct the name of the file, the extension will be added later
+        this.fileName = `${courseName} ${this.lessonIndex} ${currentChapterIndex}. ${this.chapterTitle} ${this.lessonNumber}. ${this.lessonTitle}`;
+
+        // Check whether the lesson is quiz or video and process it accordingly
         if (this.lessonTitle === "Chapter Quiz") {
+            this.lessonType = "quiz";
+            this.fileExt = "png";
+            this.src = document.querySelector(".classroom-quiz .chapter-quiz");
+            const fullFileName = `${this.fileName}.${this.fileExt}`; // console.log(fullFileName);
+
             if (downloadType === "all" || downloadType === "quiz") {
-                this.lessonType = "quiz";
-                this.src = document.querySelector(".classroom-quiz .chapter-quiz");
-                console.log(this.fileName);
-                await this.downloadPng();
+                await this.downloadPng(fullFileName);
             } else {
-                console.log(`${this.fileName} :: is skipped.`);
+                console.log(`${fullFileName} :: is skipped!`);
             }
         } else {
+            this.lessonType = "video";
+            this.fileExt = "mp4";
+            this.src = document.querySelector("video").src;
+            const fullFileName = `${this.fileName}.${this.fileExt}`; // console.log(fullFileName);
+
             if (downloadType === "all" || downloadType === "video") {
-                this.lessonType = "video";
-                this.src = document.querySelector("video").src;
-                console.log(this.fileName);
-                await this.downloadVideo();
+                await this.downloadVideo(fullFileName);
             } else {
-                console.log(`${this.fileName} is skipped.`);
+                console.log(`${fullFileName} is skipped!`);
             }
         }
     }
 
-    async downloadVideo() {
-        const fileName = `${this.fileName}.mp4`;
-
+    async downloadVideo(fullFileName) {
         return fetch(this.src)
             .then(response => response.blob())
             .then(blob => {
@@ -97,29 +110,26 @@ class Lesson {
                 downloadLink.href = blobURL;
                 downloadLink.style = "display: none";
 
-                downloadLink.download = fileName;
+                downloadLink.download = fullFileName;
                 document.body.appendChild(downloadLink);
                 downloadLink.click();
 
                 return new Promise(resolve => {
-                    setTimeout(() => {
-                        document.body.removeChild(downloadLink);
-                        resolve();
-                    }, 1500);
+                    document.body.removeChild(downloadLink);
+                    console.log(fullFileName); // Log the file name
+                    setTimeout(resolve, 1500);
                 });
             })
-            .catch((error) => `Fetch error: ${error}`);
+            .catch((error) => `Video fetch error: ${error}`);
     }
 
-    async downloadPng() {
-        const fileName = `${this.fileName}.png`;
-
+    async downloadPng(fullFileName) {
         return domtoimage.toPng(this.src)
             .then(function (dataUrl) {
                 const downloadLink = document.createElement("a");
                 downloadLink.href = dataUrl;
                 document.body.appendChild(downloadLink);
-                downloadLink.download = fileName;
+                downloadLink.download = fullFileName;
                 downloadLink.click();
 
                 return new Promise(resolve => {
@@ -139,10 +149,10 @@ class Lesson {
 
 // Get common data from the page
 const courseName = document.querySelector(".classroom-nav__details h1").innerText.replace(/\n.*$/, "").trim();
-let chapters = document.querySelectorAll("ul.classroom-toc-section__items");
+let chapters = document.querySelectorAll("section.classroom-toc-section"); // ("ul.classroom-toc-section__items")
 let lessons = document.querySelectorAll("li.classroom-toc-item");
 
-function download(startFromLesson = 1, single = false, downloadType = "all") {
+function download(startFromLesson = 1, lessonsNumberToDownload = null, downloadType = "all") {
     // Expand all sections
     const buttons = document.querySelectorAll("section > h2 > button.classroom-toc-section__toggle");
     buttons.forEach(button => {
@@ -151,37 +161,36 @@ function download(startFromLesson = 1, single = false, downloadType = "all") {
 
     // Collect the data of the lessons
     setTimeout(() => {
-        chapters = document.querySelectorAll("ul.classroom-toc-section__items");
+        chapters = document.querySelectorAll("section.classroom-toc-section");
+        chapters = Array.from(chapters);
+
         lessons = document.querySelectorAll("li.classroom-toc-item");
         lessons = Array.from(lessons);
 
-        const lessonsNumber = lessons.length;
-        
-        lessons.splice(0, startFromLesson - 1);
+        const lessonsLoop = [...lessons];
+        lessonsLoop.splice(0, startFromLesson - 1);
 
-        // Create a Video object for each lesson - collect information
+        console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Start from: ${startFromLesson}`);
+
+        // Create an object for each lesson, the object will do everything, including the download
         async function collectData() {
-            if (single) {
-                    const lessonIndex = `${startFromLesson} - ${lessonsNumber}`;
-                    const video = new Lesson(lessons[startFromLesson - 1], courseName, lessonIndex);
-                    let timeout = 2000;
-                    if (video.lessonType === "quiz") timeout = 4000;
-                    await new Promise(resolve => setTimeout(resolve, timeout));
-            } else {
-                for (const lesson of lessons) {
-                    lesson.querySelector("a").click();
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    const lessonIndex = `${lessons.indexOf(lesson) + startFromLesson} - ${lessonsNumber}`;
-                    const lessonItem = new Lesson(lesson, courseName, lessonIndex, downloadType);
-                    let timeout = 2000;
-                    if (lessonItem.lessonType === "quiz") timeout = 4000;
-                    await new Promise(resolve => setTimeout(resolve, timeout));
-                }
+            let counter = 0;
 
+            for (const lesson of lessonsLoop) {
+                if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload) return;
+
+                lesson.querySelector("a").click();
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                const lessonItem = new Lesson(lesson, courseName, downloadType, chapters, lessons);
+
+                let timeout = 2000;
+                if (lessonItem.lessonType === "quiz") timeout = 4000;
+                await new Promise(resolve => setTimeout(resolve, timeout));
             }
         }
         collectData();
     }, 1000);
 }
 
-// download(1, false, "all");
+download(1);
