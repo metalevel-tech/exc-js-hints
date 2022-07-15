@@ -11,12 +11,17 @@
  * The function 'download()' takes 2 optional parameters:
  * - startFromLesson: the first lesson to be downloaded. Default is 1. 
  * - lessonsNumberToDownload: the number of the lessons to be downloaded. Default is null - which means no limit, or all.
+ * - listOfLessonsToDownload: an array of the numbers of the lessons to be downloaded. Default is null - which means disabled.
+ *                            If the array is not empty, the script will download only the lessons in the array.
+ *                            This parameter takes precedence over the 'lessonsNumberToDownload' and 'startFromLesson' parameters.
  * 
  * Examples of usage:
  *  download();                     // download all videos and/or other resources from the beginning
  *  download(5);                    // download all videos and/or other resources from the 5th lesson to the end
  *  download(5, 3);                 // start from the 5th lesson and download 3 videos and/pr other resources
  *  download(5, 1);                 // download the resources for the the 5th lesson only
+ *  download(1, 1, [3, 5, 7]);      // download the resources for the 3rd, 5th and 7th lesson only
+ *  download(5, null, [7, 3, 5]);   // same as the above...
  * 
  * Because the response of teachable's server sometime takes long time it is possible to have duplicated or/and missing lessons.
  * So you need to inspect the list of the downloaded resources, remove the duplicates and refetch the missing.
@@ -49,7 +54,7 @@ class Lesson {
     async setDataAndProcess(courseName, chapters, lessons) {
         // Get the current lesson, it is 'this.lesson' but I prefer to parse it from the DOM
         const currentLesson = document.querySelector(".section-item.next-lecture");
-        
+
         // Get the title of the lesson
         this.lessonTitle = currentLesson
             .querySelector(".lecture-name").innerText
@@ -59,7 +64,7 @@ class Lesson {
         // Get the current chapter/section and its index/number within the list of chapters
         const currentChapter = currentLesson.parentElement.parentElement;
         const currentChapterIndex = chapters.indexOf(currentChapter);
-        
+
         // Get the title of the chapter
         this.chapterTitle = currentChapter
             .querySelector(".section-title").innerText
@@ -89,9 +94,9 @@ class Lesson {
             for (const link of thisLessonDownloadLinks) {
                 this.lessonType = "video-or-pdf-or-zip";
                 this.fileExt = link.dataset['xOriginDownloadName'].split(".").pop();
-                this.src = link.href;     
+                this.src = link.href;
                 const fullFileName = `${this.fileName}.${this.fileExt}`; // console.log(fullFileName);
-    
+
                 await this.downloadResource(fullFileName);
             }
         } else {
@@ -146,26 +151,34 @@ let lessons = document.querySelectorAll('.course-section li.section-item');
 // Probably instead of loop it is better to use a recursive function,
 // which shifts the 'lessons' array at each iteration, process the shifted element,
 // and pass the rest array to itself as callback by promise.
-function download(startFromLesson = 1, lessonsNumberToDownload = null) {
-
+function download(
+    startFromLesson = 1,
+    lessonsNumberToDownload = null,
+    listOfLessonsToDownload = null
+) {
     setTimeout(() => {
         chapters = document.querySelectorAll('.course-section');
         chapters = Array.from(chapters);
 
         lessons = document.querySelectorAll('.course-section li.section-item');
         lessons = Array.from(lessons);
-        
-        const lessonsLoop = [...lessons];
-        lessonsLoop.splice(0, startFromLesson - 1);
-        
-        console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Start from: ${startFromLesson}`);
-        
+
+        let lessonsLoop;
+        if (listOfLessonsToDownload) {
+            lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1) ? true : false);
+            console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Download items: ${listOfLessonsToDownload}`);
+        } else {
+            lessonsLoop = [...lessons];
+            lessonsLoop.splice(0, startFromLesson - 1);
+            console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Start from: ${startFromLesson}, Download: ${lessonsNumberToDownload ? lessonsNumberToDownload : "all"}`);
+        }
+
         // Create an object for each lesson, the object will do everything, including the download
         async function collectData() {
             let counter = 0;
 
             for (const lesson of lessonsLoop) {
-                if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload) return;
+                if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload && !listOfLessonsToDownload) return;
 
                 lesson.querySelector('a').click();
                 await new Promise(resolve => setTimeout(resolve, 4000));
@@ -181,5 +194,6 @@ function download(startFromLesson = 1, lessonsNumberToDownload = null) {
     }, 1000);
 }
 
-download(3, 2);
+// download(3, 2);
 // download(1);
+download(1, 1, [3, 5, 7]);

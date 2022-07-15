@@ -784,14 +784,19 @@
  * The function 'download()' takes 3 optional parameters:
  * - startFromLesson: the first lesson to be downloaded. Default is 1. 
  * - lessonsNumberToDownload: the number of the lessons to be downloaded. Default is null - which means no limit, or all.
+ * - listOfLessonsToDownload: an array of the numbers of the lessons to be downloaded. Default is null - which means disabled.
+ *                            If the array is not empty, the script will download only the lessons in the array.
+ *                            This parameter takes precedence over the 'lessonsNumberToDownload' and 'startFromLesson' parameters.
  * - downloadType: 'all', 'video' or 'quiz'. Default is 'all'.
  * 
  * Examples of usage:
- *  download();                     // download all videos and quizzes from the beginning
- *  download(5);                    // download all videos and quizzes from the 5th lesson to the end
- *  download(5, 3);                 // start from the 5th lesson and download 3 videos and/pr quizzes
- *  download(5, 1);                 // download only the 5th lesson
- *  download(1, null, 'video');     // download only the videos from the beginning to the end
+ *  download();                       // download all videos and quizzes from the beginning
+ *  download(5);                      // download all videos and quizzes from the 5th lesson to the end
+ *  download(5, 3);                   // start from the 5th lesson and download 3 videos and/pr quizzes
+ *  download(5, 1);                   // download only the 5th lesson
+ *  download(1, null, null, 'video'); // download only the videos from the beginning to the end
+ *  download(1, 1, [3, 5, 7]);        // download the resources for the 3rd, 5th and 7th lesson only
+ *  download(5, null, [7, 3, 5]);     // same as the above...
  * 
  * The videos are much easier to be handled, because quizzes have multiple pages and you must solve one question to view the next.
  * So probably you will want to: 1st download all videos, and then download manually the quizzes (if you need them),
@@ -923,7 +928,12 @@ const courseName = document.querySelector(".classroom-nav__details h1").innerTex
 let chapters = document.querySelectorAll("section.classroom-toc-section"); // ("ul.classroom-toc-section__items")
 let lessons = document.querySelectorAll("li.classroom-toc-item");
 
-function download(startFromLesson = 1, lessonsNumberToDownload = null, downloadType = "all") {
+function download(
+    startFromLesson = 1,
+    lessonsNumberToDownload = null,
+    listOfLessonsToDownload = null,
+    downloadType = "all"
+) {
     // Expand all sections
     const buttons = document.querySelectorAll("section > h2 > button.classroom-toc-section__toggle");
     buttons.forEach(button => {
@@ -938,17 +948,22 @@ function download(startFromLesson = 1, lessonsNumberToDownload = null, downloadT
         lessons = document.querySelectorAll("li.classroom-toc-item");
         lessons = Array.from(lessons);
 
-        const lessonsLoop = [...lessons];
-        lessonsLoop.splice(0, startFromLesson - 1);
-
-        console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Start from: ${startFromLesson}`);
+        let lessonsLoop;
+        if (listOfLessonsToDownload) {
+            lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1) ? true : false);
+            console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Download items: ${listOfLessonsToDownload}`);
+        } else {
+            lessonsLoop = [...lessons];
+            lessonsLoop.splice(0, startFromLesson - 1);
+            console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Start from: ${startFromLesson}, Download: ${lessonsNumberToDownload ? lessonsNumberToDownload : "all"}`);
+        }
 
         // Create an object for each lesson, the object will do everything, including the download
         async function collectData() {
             let counter = 0;
 
             for (const lesson of lessonsLoop) {
-                if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload) return;
+                if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload && !listOfLessonsToDownload) return;
 
                 lesson.querySelector("a").click();
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -964,4 +979,6 @@ function download(startFromLesson = 1, lessonsNumberToDownload = null, downloadT
     }, 1000);
 }
 
-download(1);
+// download(3, 2);
+// download(1);
+download(1, 1, [3, 5, 7]);
