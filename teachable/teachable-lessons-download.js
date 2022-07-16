@@ -9,19 +9,23 @@
  * 
  * 
  * The function 'download()' takes 2 optional parameters:
- * - startFromLesson: the first lesson to be downloaded. Default is 1. 
- * - lessonsNumberToDownload: the number of the lessons to be downloaded. Default is null - which means no limit, or all.
- * - listOfLessonsToDownload: an array of the numbers of the lessons to be downloaded. Default is null - which means disabled.
- *                            If the array is not empty, the script will download only the lessons in the array.
- *                            This parameter takes precedence over the 'lessonsNumberToDownload' and 'startFromLesson' parameters.
+ * > startFromLesson         - The first lesson to be downloaded. Default is 1. When the value is set to 0, the script will download only the current lesson.
+ * > lessonsNumberToDownload - The number of the lessons to be downloaded. Default is null - which means no limit, or all.
+ * > listOfLessonsToDownload - An array of the numbers of the lessons to be downloaded. Default is null - which means disabled.
+ *                             If the array is not empty, the script will download only the lessons in the array.
+ *                             Note if you need to download the first lesson you must set element with value 1 (not 0).
+ *                             This parameter takes precedence over the 'lessonsNumberToDownload' and 'startFromLesson' parameters.
  * 
  * Examples of usage:
  *  download();                     // download all videos and/or other resources from the beginning
+ *  download(1);                    // the same as the above...
  *  download(5);                    // download all videos and/or other resources from the 5th lesson to the end
  *  download(5, 3);                 // start from the 5th lesson and download 3 videos and/pr other resources
  *  download(5, 1);                 // download the resources for the the 5th lesson only
  *  download(1, 1, [3, 5, 7]);      // download the resources for the 3rd, 5th and 7th lesson only
- *  download(5, null, [7, 3, 5]);   // same as the above...
+ *  download(5, null, [7, 3, 5]);   // the same as the above...
+ *  download(0);                    // get the current lesson only
+ *  download(0, 2, [3, 5]);         // the same as the above...
  * 
  * Because the response of teachable's server sometime takes long time it is possible to have duplicated or/and missing lessons.
  * So you need to inspect the list of the downloaded resources, remove the duplicates and refetch the missing.
@@ -156,6 +160,12 @@ function download(
     lessonsNumberToDownload = null,
     listOfLessonsToDownload = null
 ) {
+    // Handle the case when we capturing the current lesson only: startFromLesson = 1
+    if (startFromLesson === 0) {
+        lessonsNumberToDownload = 1;
+        listOfLessonsToDownload = null;
+    }
+
     setTimeout(() => {
         chapters = document.querySelectorAll('.course-section');
         chapters = Array.from(chapters);
@@ -165,7 +175,8 @@ function download(
 
         let lessonsLoop;
         if (listOfLessonsToDownload) {
-            lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1) ? true : false);
+            // lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1) ? true : false);
+            lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1));
             console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Download items: ${listOfLessonsToDownload}`);
         } else {
             lessonsLoop = [...lessons];
@@ -180,7 +191,8 @@ function download(
             for (const lesson of lessonsLoop) {
                 if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload && !listOfLessonsToDownload) return;
 
-                lesson.querySelector('a').click();
+                if (lesson !== document.querySelector(".section-item.next-lecture") && startFromLesson !== 0) lesson.querySelector('a').click();
+
                 await new Promise(resolve => setTimeout(resolve, 4000));
 
                 const lessonItem = new Lesson(lesson, courseName, chapters, lessons);

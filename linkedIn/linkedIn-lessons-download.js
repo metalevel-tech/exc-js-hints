@@ -11,21 +11,25 @@
  * Once the script (and 'dom-to-image.js') are pasted in the console you can start the action by calling the function 'download()'.
  * 
  * The function 'download()' takes 3 optional parameters:
- * - startFromLesson: the first lesson to be downloaded. Default is 1. 
- * - lessonsNumberToDownload: the number of the lessons to be downloaded. Default is null - which means no limit, or all.
- * - listOfLessonsToDownload: an array of the numbers of the lessons to be downloaded. Default is null - which means disabled.
- *                            If the array is not empty, the script will download only the lessons in the array.
- *                            This parameter takes precedence over the 'lessonsNumberToDownload' and 'startFromLesson' parameters.
- * - downloadType: 'all', 'video' or 'quiz'. Default is 'all'.
+ * > startFromLesson         - The first lesson to be downloaded. Default is 1. When the value is set to 0, the script will download only the current lesson.
+ * > lessonsNumberToDownload - The number of the lessons to be downloaded. Default is null - which means no limit, or all.
+ * > listOfLessonsToDownload - An array of the numbers of the lessons to be downloaded. Default is null - which means disabled.
+ *                             If the array is not empty, the script will download only the lessons in the array.
+ *                             Note if you need to download the first lesson you must set element with value 1 (not 0).
+ *                             This parameter takes precedence over the 'lessonsNumberToDownload' and 'startFromLesson' parameters.
+ * > downloadType            - 'all', 'video' or 'quiz'. Default is 'all'.
  * 
  * Examples of usage:
  *  download();                       // download all videos and quizzes from the beginning
+ *  download(1);                      // the same as the above...
  *  download(5);                      // download all videos and quizzes from the 5th lesson to the end
  *  download(5, 3);                   // start from the 5th lesson and download 3 videos and/pr quizzes
  *  download(5, 1);                   // download only the 5th lesson
  *  download(1, null, null, 'video'); // download only the videos from the beginning to the end
  *  download(1, 1, [3, 5, 7]);        // download the resources for the 3rd, 5th and 7th lesson only
- *  download(5, null, [7, 3, 5]);     // same as the above...
+ *  download(5, null, [7, 3, 5]);     // the same as the above...
+ *  download(0);                      // get the current lesson only
+ *  download(0, 2, [3, 5]);           // the same as the above...
  * 
  * The videos are much easier to be handled, because quizzes have multiple pages and you must solve one question to view the next.
  * So probably you will want to: 1st download all videos, and then download manually the quizzes (if you need them),
@@ -48,13 +52,18 @@ class Lesson {
     }
 
     async setDataAndProcess(courseName, chapters, lessons, downloadType = "all") {
-        // Get the current lesson, it is 'this.lesson' but I prefer to parse it from the DOM
+        // Get the current lesson, it is 'this.lesson' but when 'startFromLesson = 0' we capturing the current lesson...
         const currentLesson = document.querySelector(".classroom-toc-item--selected");
 
         // Get the title of the lesson
-        this.lessonTitle = currentLesson
+        const lessonTitle = currentLesson
             .querySelector(".classroom-toc-item__title").innerText
             .replace(/\n.*$/, "").replace(/:/g, " -").replace(/^\d+\s*[-.]\s/, "").trim();
+        // Get the duration of the lesson
+        const duration = currentLesson.querySelector(".classroom-toc-item__title + div").innerText
+            .replace(/ /, "").trim();
+        // Compose the full title of the lesson
+        this.lessonTitle = `${lessonTitle} (${duration})`;
 
         // Get the current chapter/section and its index/number within the list of chapters
         const currentChapter = currentLesson.parentElement.parentElement;
@@ -81,7 +90,7 @@ class Lesson {
         this.fileName = `${courseName} ${this.lessonIndex} ${currentChapterIndex}. ${this.chapterTitle} ${this.lessonNumber}. ${this.lessonTitle}`;
 
         // Check whether the lesson is quiz or video and process it accordingly
-        if (this.lessonTitle === "Chapter Quiz") {
+        if (lessonTitle === "Chapter Quiz") {
             this.lessonType = "quiz";
             this.fileExt = "png";
             this.src = document.querySelector(".classroom-quiz .chapter-quiz");
@@ -138,10 +147,9 @@ class Lesson {
                 downloadLink.click();
 
                 return new Promise(resolve => {
-                    setTimeout(() => {
-                        document.body.removeChild(downloadLink);
-                        resolve();
-                    }, 3500);
+                    document.body.removeChild(downloadLink);
+                    console.log(fullFileName); // Log the file name
+                    setTimeout(resolve, 3500);
                 });
 
             })
@@ -153,7 +161,12 @@ class Lesson {
 }
 
 // Get common data from the page
-const courseName = document.querySelector(".classroom-nav__details h1").innerText.replace(/\n.*$/, "").trim();
+let courseName = document.querySelector(".classroom-nav__details h1").innerText.replace(/\n.*$/, "").trim();
+let overview = document.querySelector(".classroom-workspace-overview__header");
+if (overview) {
+    let courseDuration = overview.querySelector("ul > li:first-child").innerText.replace(/\s+/g, "").trim();
+    courseName = `${courseName} (${courseDuration})`;
+} 
 let chapters = document.querySelectorAll("section.classroom-toc-section"); // ("ul.classroom-toc-section__items")
 let lessons = document.querySelectorAll("li.classroom-toc-item");
 
@@ -163,6 +176,12 @@ function download(
     listOfLessonsToDownload = null,
     downloadType = "all"
 ) {
+    // Handle the case when we capturing the current lesson only: startFromLesson = 1
+    if (startFromLesson === 0) {
+        lessonsNumberToDownload = 1;
+        listOfLessonsToDownload = null;
+    }
+
     // Expand all sections
     const buttons = document.querySelectorAll("section > h2 > button.classroom-toc-section__toggle");
     buttons.forEach(button => {
@@ -179,7 +198,8 @@ function download(
 
         let lessonsLoop;
         if (listOfLessonsToDownload) {
-            lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1) ? true : false);
+            // lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1) ? true : false);
+            lessonsLoop = lessons.filter((value, index) => listOfLessonsToDownload.includes(index + 1));
             console.log(`Chapters: ${chapters.length}, Lessons: ${lessons.length}, Download items: ${listOfLessonsToDownload}`);
         } else {
             lessonsLoop = [...lessons];
@@ -194,7 +214,8 @@ function download(
             for (const lesson of lessonsLoop) {
                 if (lessonsNumberToDownload && counter++ >= lessonsNumberToDownload && !listOfLessonsToDownload) return;
 
-                lesson.querySelector("a").click();
+                if (lesson !== document.querySelector(".classroom-toc-item--selected") && startFromLesson !== 0) lesson.querySelector("a").click();
+
                 await new Promise(resolve => setTimeout(resolve, 2000));
 
                 const lessonItem = new Lesson(lesson, courseName, downloadType, chapters, lessons);
@@ -209,5 +230,7 @@ function download(
 }
 
 // download(3, 2);
-// download(1);
-download(1, 1, [3, 5, 7]);
+// download(27);
+download(0);
+// download(1, 1, [3, 5, 10]);
+// download(11, null, null, 'video');
