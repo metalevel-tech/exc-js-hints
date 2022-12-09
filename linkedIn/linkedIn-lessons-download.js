@@ -23,7 +23,7 @@
  *  download();                       // download all videos and quizzes from the beginning
  *  download(1);                      // the same as the above...
  *  download(5);                      // download all videos and quizzes from the 5th lesson to the end
- *  download(5, 3);                   // start from the 5th lesson and download 3 videos and/pr quizzes
+ *  download(5, 3);                   // start from the 5th lesson and download 3 videos and/or quizzes
  *  download(5, 1);                   // download only the 5th lesson
  *  download(1, null, null, 'video'); // download only the videos from the beginning to the end
  *  download(1, 1, [3, 5, 7]);        // download the resources for the 3rd, 5th and 7th lesson only
@@ -231,6 +231,7 @@ function download(
 
 // download(3, 2);
 // download(27);
-download(0);
 // download(1, 1, [3, 5, 10]);
 // download(11, null, null, 'video');
+download(4, null, null, 'video');
+// download(0);
