@@ -1,5 +1,5 @@
 /**
- * Download Facebook video (December 2022).
+ * Download Facebook video workaround (December 2022).
  * 
  * 1. Open the Facebook video you want to download.
  * 2. Edit the address bar and replace "www.facebook..." with "m.facebook..." and press Enter.
